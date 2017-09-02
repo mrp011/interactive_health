@@ -1,0 +1,26 @@
+bcbs_place_of_service_decode <- function(place_service){
+  x <- case_when(place_service == '23' ~ 'ER',
+                 place_service %in% c('41', '42', '9A') ~ 'ambulance',
+                 place_service == '85' ~ 'dental',
+                 place_service == '60' ~ 'immunization center',
+                 place_service == '21' ~ 'IP hospital',
+                 place_service == '81' ~ 'lab',
+                 place_service %in% c('05', '06', '07', '08', '11', 
+                                        '15', '17', '25', '26', '31',
+                                        '32', '49', '54', '65', '71', 
+                                        '72', 'BD') ~ 'medical facility',
+                 place_service %in% c('13', '14', '1S', '34',
+                                        '35', '4S') ~ 'medical shelter/residence',
+                 place_service == '50' ~ 'medicare facility',
+                 place_service %in% c('03', '09', '18') ~ 'non-medical facility',
+                 place_service %in% c('04', '12', '16', '33', '87') ~ 'non-medical shelter/residence',
+                 place_service == '22' ~ 'OP hospital',
+                 place_service == '01' ~ 'pharmacy',
+                 place_service %in% c('51', '52', '53', '56') ~ 'psychiatric facility',
+                 place_service %in% c('1Z', '2Z', '61', '62') ~ 'rehab hospital',
+                 place_service %in% c('55', '57') ~ 'substance abuse facility',
+                 place_service %in% c('24', '2F', 'BF') ~ 'surgical center',
+                 place_service == '20' ~ 'UC', 
+                 TRUE ~ 'unknown')
+  return(x)
+}

@@ -61,7 +61,7 @@ flags <- df_pii %>% left_join(df_phs) %>%
          "Values_Sp_NP" = Values_all_NP*Values_all_Sp,
          "Gender" = ifelse(sex, "Female", "Male"),
          "Age" = ifelse(age_45, "45 and over", '< 45'),
-         "Geography" = ifelse(geo_risk, 'High Risk Zip Code','Low Risk Zip Code')) 
+         "Geography" = ifelse(geo_risk, 'High Risk Zip Code','Low Risk Zip Code'))
 
 flags_phs <- df_pii %>% left_join(df_phs) %>% 
   filter(assessment == max(ymd(df_phs$assessment))) %>%
@@ -91,6 +91,24 @@ demo_xtabs_tab <- flags %>% create_crosstab(Gender) %>% union_all(create_crossta
          "Subcategory" = coalesce(Gender, Age, Geography)) %>%
   select(Category, Subcategory, Values_all_P, Values_all_NP, Values_all_Emp, Values_all_Sp, Values_Emp_P, Values_Emp_NP, Values_Sp_P, Values_Sp_NP) %>%
   bind_cols(df_counts[rep(1, 6),])
+
+##### Build total_demographics #####
+
+phs <- df_phs %>% filter(assessment == max(assessment)) %>% select(master_id)
+
+all_flags <- df_pii %>% 
+  transmute(master_id = master_id, 
+            employment = ifelse(emp_flag, 'Employee', 'Spouse'), 
+            sex = ifelse(sex, 'Female', 'Male'),
+            age = ifelse(age_45, 'Age 45 and Older', 'Under 45'),
+            participation = ifelse(master_id %in% phs$master_id, 'Participant', 'Non-Participant'))
+
+total_demographics <- bind_cols(
+  all_flags %>% group_by(employment) %>% summarise(emp_percent = n()/dim(all_flags)[1]) %>% ungroup(),
+  all_flags %>% group_by(sex) %>% summarise(sex_percent = n()/dim(all_flags)[1]) %>% ungroup(),
+  all_flags %>% group_by(age) %>% summarise(age_percent = n()/dim(all_flags)[1]) %>% ungroup(),
+  all_flags %>% group_by(participation) %>% summarise(part_percent = n()/dim(all_flags)[1]) %>% ungroup()
+)
 
 ##### Build demo_phs_xtabs #####
 
@@ -204,7 +222,9 @@ write_csv(demo_xtabs_tab, paste0(directory, "Data/Build_Tables/demo_xtabs.csv"))
 write_csv(demo_xtabs_phs_tab, paste0(directory, "Data/Build_Tables/demo_phs_xtabs.csv"))
 write_csv(phs_count_by_year_tab, paste0(directory, "Data/Build_Tables/phs_count_by_year.csv"))
 write_csv(demo_tree_phs, paste0(directory, 'Data/Build_Tables/demo_tree_phs.csv'))
+write_csv(total_demographics, paste0(directory, "Data/Build_Tables/trend_summary_demographics.csv"))
 
+print("trend_summary_demographics written to Data/Build_Tables")
 print("demo_xtabs written to Data/Build_Tables")
 print("demo_phs_xtabs written to Data/Build_Tables")
 print("model written to Data/Build_Tables")
@@ -214,5 +234,5 @@ print("demo_tree_Emp_P_vs_NP written to Data/Build_Tables")
 print("demo_tree_Sp_P_vs_NP written to Data/Build_Tables")
 print("phs_count_by_year written to Data/Build_Tables")
 
-rm("df_counts", "df_phs", "df_pii", "flags", "create_crosstab")
+rm("df_counts", "df_phs", "df_pii", "flags", "create_crosstab", "all_flags", 'phs')
 

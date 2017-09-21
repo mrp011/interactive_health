@@ -94,8 +94,8 @@ new_phs_cols<-c("assessment", "phs", "met_goal", "bmi", "inactive", "smoker",
                 "hyperten_new", "met_syn", "crit_cond", "no_diabetes", "pre_diabetes", "con_diabetes", "uncon_diabetes", "diabetes_new", 
                 "IH_ID", "first", "last", "dob", "sex", "address_1", "address_2", "city", "state", "zip")
 
-phs<-read_csv(paste0(directory, "Data/Raw/raw_phs.csv"), col_types = cols(.default = "c")) %>% 
-  union_all(read_csv(paste0(directory, "Data/Raw/raw_phs_13.csv"), col_types = cols(.default = "c")))
+phs<-read_xlsx(paste0(directory, "Data/Raw/raw_phs.xlsx"))#, col_types = cols(.default = "c")) #%>% 
+  #union_all(read_csv(paste0(directory, "Data/Raw/raw_phs_13.csv"), col_types = cols(.default = "c")))
 phs<-phs[match(phs_cols,colnames(phs))]
 colnames(phs)<-new_phs_cols
 
@@ -113,10 +113,10 @@ phs$address_1 <- iconv(phs$address_1, "UTF-8", "UTF-8", sub = " ")
 
 ##### Format Data #####
 
-phs <- phs %>% mutate('assessment' = mdy(assessment),
+phs <- phs %>% mutate('assessment' = ymd(as.character(assessment)),
                       'first' = gsub("[[:punct:]]", "", gsub("-", " ", tolower(first))),
                       'last' = gsub("[[:punct:]]", "", gsub("-", " ", tolower(last))),
-                      'dob' = mdy(dob), 
+                      'dob' = ymd(as.character(dob)),
                       'sex' = format_sex(sex)) %>%
   mutate_each(funs(as.numeric(gsub("NULL", NA, .))), phs, bmi, inactive, smoker, emot_risk, 
               emot_risk_mod, emot_risk_sev, anemia, high_chol, high_chol_new, hyperten, hyperten_new, 
@@ -183,11 +183,11 @@ phs_analytics <- phs_full
 human_flags <- assign_table("human_flags_tab", "Data/Sub_Tables/human_flags.csv")
 phs_analytics <- phs_analytics %>% filter(assessment <= analysis_end) %>% 
   left_join(human_flags) %>% filter(assessment >= cov_start_dt, assessment <= cov_end_dt) %>%
-  mutate(Year = year(assessment),
-         risk_tier = case_when(phs <= 0 ~ 'low',
-                               phs <= 25 ~ 'mod',
-                               phs > 25 ~ 'high',
-                               TRUE ~ 'unkown')) 
+  mutate(participation_year = year(assessment),
+         risk_tier = case_when(.$phs <= 0 ~ 'low',
+                               .$phs <= 25 ~ 'mod',
+                               .$phs > 25 ~ 'high',
+                               TRUE ~ 'unknown')) %>% select(-geo_risk, -emp_flag, -cov_start_dt, -cov_end_dt, -age_45, -age_18.45)
 
 original_assessments_tab <- phs_analytics %>% distinct(assessment) %>% arrange(assessment) %>% filter(assessment < analysis_date)
 
@@ -211,4 +211,4 @@ print("original_assessments written to Data/Sub_Tables")
 
 phs_tab <- phs_analytics %>% ungroup()
 
-rm("phs", "phs_analytics", "phs_cols", "new_phs_cols", "format_sex", 'format_address', 'census_id_bridge', 'first_assessment', 'starters')
+rm("phs", "phs_analytics", "phs_cols", "new_phs_cols", "format_sex", 'format_address', 'census_id_bridge', 'first_assessment')

@@ -168,4 +168,4 @@ print("original_assessments written to Data/Sub_Tables")
 
 phs_tab <- phs_analytics %>% ungroup()
 
-rm("phs", "phs_analytics", "phs_cols", "new_phs_cols", "format_sex", 'format_address', 'census_id_bridge', 'first_assessment')
+rm("phs", "phs_analytics", "phs_cols", "new_phs_cols", "format_sex", 'format_address', 'census_id_bridge', 'first_assessment', "human_flags")

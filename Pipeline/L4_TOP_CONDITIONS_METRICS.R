@@ -121,7 +121,16 @@ phs <- assign_table("phs_tab", "Data/Sub_Tables/phs_analytics.csv") %>% deid_con
 
 demo <- phs  %>%
   left_join(human_flags) %>% filter(participation_year == year(analysis_end),
-                                    is.na(cov_end_dt) | cov_end_dt >= analysis_date) %>% 
+                                    is.na(cov_end_dt) | cov_end_dt >= analysis_date) 
+
+if(dim(demo)[1] == 0){
+  demo <- phs  %>%
+    left_join(human_flags) %>%
+    filter(participation_year == year(analysis_end),
+           cov_end_dt == max(cov_end_dt)) 
+}
+
+demo <- demo %>% 
   mutate(male = 1-sex,
          female = sex,
          geo_high_risk = geo_risk,

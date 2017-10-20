@@ -34,10 +34,10 @@ get_count <- function(start, end, position_1, position_2, link){
 human_flags <- assign_table("human_flags_tab", "Data/Sub_Tables/human_flags.csv")  
 phs <- assign_table("phs_tab", "Data/Sub_Tables/phs_analytics.csv")
 
-full_members <- human_flags %>% filter(cov_start_dt <= analysis_start, cov_end_dt >= analysis_date) 
+full_members <- human_flags %>% filter(cov_start_dt <= analysis_start, cov_end_dt >= analysis_date | is.na(cov_end_dt)) 
 
 if(dim(full_members)[1] == 0){
-  full_members <- human_flags %>% filter(cov_start_dt <= analysis_start, cov_end_dt == max(cov_end_dt))   
+  full_members <- human_flags %>% filter(cov_start_dt <= analysis_start, cov_end_dt == max(cov_end_dt) | is.na(cov_end_dt))   
 }
 
 full_participants <- phs %>% group_by(master_id) %>% summarise(ct = n()) %>% ungroup() %>%
@@ -97,41 +97,6 @@ d_all <- data.frame("category" = c(),
   
   d_all <- bind_rows(d_all, d_links, d_nodes) %>% distinct()
 
-#for(i in 1:(length(get_assessments())-1)){
-#  d1 <- tibble('start' = years[i],
-#               'end' = years[i+1],
-#               'phs_level' = c('Low Risk', 'Moderate Risk', 'High Risk'),
-#               'position_1' = c(3, 2, 1),
-#               'tier' = i-1)
-#  d2 <- tibble('start' = years[i+1],
-#               'phs_level' = c('Low Risk', 'Moderate Risk', 'High Risk'),
-#               'position_2' = c(3, 2, 1),
-#               'color' = c('low', 'mod', 'high'))
-#  
-#  d_links <- full_join(d1, d2, by = c('end' = 'start')) %>%
-#    mutate(category = do.call(paste, list(phs_level.x, start, "to", phs_level.y, end)),
-#           link = 'link',
-#           year = '') %>%
-#    select(category, start, end, tier, position_1, position_2, link, color, year)
-#  
-#  d_nodes <- d1 %>% mutate(category = do.call(paste0, list(start, phs_level)),
-#                           link = 'node',
-#                           position_2 = position_1,
-#                           color = phs_level,
-#                           year = ifelse(phs_level == 'Low Risk', as.character(start), '')) %>%
-#    select(category, start, end, tier, position_1, position_2, link, color, year) %>%
-#    union_all(d2 %>% mutate(category = do.call(paste0, list(start, phs_level)),
-#                            link = 'node',
-#                            color = phs_level,
-#                            position_1 = position_2,
-#                            end = start+1,
-#                            tier = i,
-#                            year = ifelse(phs_level == 'Low Risk', as.character(start), '')) %>%
-#                select(category, start, end, tier, position_1, position_2, link, color, year)) 
-#  
-#  d_all <- bind_rows(d_all, d_links, d_nodes) %>% distinct()
-#}
-
 ##### Build PHS Cohort Membership #####
 
 d_full <- d_all %>%
@@ -142,59 +107,13 @@ d_full <- d_all %>%
          label = ifelse(link == 'node', str_replace(category, '[[:number:]]+', ''), ''),
          color = do.call(paste, list(color, link)))
 
-##### Add Root for PHS Cohort Membership Plus #####
-
-#d_full_plus <- d_full %>% mutate(tier = tier+2) %>%
-#  bind_rows(tibble('category' = c('All Participants', 'part to low', 'part to mod', 'part to high'),
-#                   'tier' = c(0, 0, 0, 0),
-#                   'position_1' = c(2, 2, 2, 2),
-#                   'position_2' = c(2, 3, 2, 1),
-#                   'link' = c('node', 'link', 'link', 'link'),
-#                   'color' = c('Participants node', 'low link', 'mod link', 'high link'),
-#                   'year' = c('', '', '', ''),
-#                   'value' = c(1.1*dim(full_participants)[1], get_count(0, 3, 3, 'node'), get_count(0, 2, 2, 'node'), get_count(0, 1, 1, 'node')),
-#                   'node_value_label' = c(as.character(dim(full_participants)[1]), '', '', ''),
-#                   'percent' = c('1', '', '', ''),
-#                   'label' = c('All Full-Time\nParticipants', '', '', '')),
-#            tibble('category' = c('Low to Low', 'Mod to Mod', 'High to High'),
-#                   'tier' = c(1, 1, 1),
-#                   'position_1' = c(3, 2, 1),
-#                   'position_2' = c(3, 2, 1),
-#                   'link' = 'link',
-#                   'color' = c('low link', 'mod link', 'high link'),
-#                   'year' = c('', '', ''),
-#                   'value' = c(get_count(0, 3, 3, 'node'), get_count(0, 2, 2, 'node'), get_count(0, 1, 1, 'node')),
-#                   'node_value_label' = c('', '', ''),
-#                   'percent' = c('', '', ''),
-#                   'label' = c('', '', ''))) %>%
-#  mutate(label = ifelse(tier == 2 | tier == 0, label, ''),
-#         tier = ifelse(link == 'node' & tier == 2, 1.5, tier))
-
-#d_full_plus <- d_full %>% mutate(tier = tier+1) %>%
-#  bind_rows(tibble('category' = c('All Participants', 'part to low', 'part to mod', 'part to high'),
-#                   'tier' = c(0, 0, 0, 0),
-#                   'position_1' = c(2, 2, 2, 2),
-#                   'position_2' = c(2, 3, 2, 1),
-#                   'link' = c('node', 'link', 'link', 'link'),
-#                   'color' = c('Participants node', 'low link', 'mod link', 'high link'),
-#                   'year' = c('', '', '', ''),
-#                   'value' = c(1.1*dim(full_participants)[1], get_count(0, 3, 3, 'node'), get_count(0, 2, 2, 'node'), get_count(0, 1, 1, 'node')),
-#                   'node_value_label' = c(as.character(dim(full_participants)[1]), '', '', ''),
-#                   'percent' = c('1', '', '', ''),
-#                   'label' = c('All Full-Time\nParticipants', '', '', ''))) %>%
-#  mutate(label = ifelse(tier == max(d_full$tier)+1 | tier == 0, label, ''))
-
 ##### Write Data ######
 
 write_csv(d_full, paste0(directory, "Data/Build_Tables/phs_cohorts_membership.csv"))
-#write_csv(d_full_plus, paste0(directory, "Data/Build_Tables/phs_cohorts_membership_full.csv"))
-#write_csv(d_full_plus, paste0(directory, "Data/Build_Tables/phs_cohorts_membership_full_labels2.csv"))
 
 print('phs_cohorts_membership Written to Data/Build_Tables')
-#print('phs_cohorts_membership_full Written to Data/Build_Tables')
 
 d_full -> phs_cohorts_membership_tab
-#d_full_plus -> phs_cohorts_membership_full_tab
 
-rm('d_full', 'd_full_plus', 'd_links', 'd_nodes', 'd1', 'd2', 'full_members', 'full_non_participants', 'full_participant_phs', 
-   'full_participants', 'human_flags', 'phs', 'd_all', 'i')
+rm('d_full', 'd_links', 'd_nodes', 'd1', 'd2', 'full_members', 'full_non_participants', 'full_participant_phs', 
+   'full_participants', 'human_flags', 'phs', 'd_all')

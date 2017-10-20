@@ -93,16 +93,16 @@ df_metgoals_by_year <- df_metgoals_by_year %>% mutate(Year = as.character(Year))
 ##### Write Data #####
 
 write_csv(df_total_claims_by_year, paste0(directory, "Data/Build_Tables/pmpm_by_year_phs.csv"))
-write_csv(df_claims_by_quarter, paste0(directory, "Data/Build_Tables/pmpm_by_quarter_phs.csv"))
+#write_csv(df_claims_by_quarter, paste0(directory, "Data/Build_Tables/pmpm_by_quarter_phs.csv"))
 write_csv(df_metgoals_by_year, paste0(directory, "Data/Build_Tables/pmpm_metgoals_by_year.csv"))
 write_csv(claims, paste0(directory, "Data/Sub_Tables/claims_per_phs.csv"))
 
 print("pmpm_by_year_phs written to Data/Build_Tables")
-print("pmpm_by_quarter_phs written to Data/Build_Tables")
+#print("pmpm_by_quarter_phs written to Data/Build_Tables")
 print("pmpm_metgoals_by_year written to Data/Build_Tables")
 
 df_total_claims_by_year -> pmpm_by_year_phs_tab
-df_claims_by_quarter -> pmpm_by_quarter_phs_tab
+#df_claims_by_quarter -> pmpm_by_quarter_phs_tab
 df_metgoals_by_year -> pmpm_metgoals_by_year_tab
 claims -> claims_per_phs_tab
 

@@ -17,23 +17,23 @@
 ###########################################
 
 phs <- assign_table("phs_tab", "Data/Sub_Tables/phs_analytics.csv") %>% 
-  mutate(high_chol = as.numeric(high_chol | high_chol_new),
+  mutate(high_chol = as.numeric(ldl),
          hyperten = as.numeric(hyperten | hyperten_new)) %>% 
-  select(master_id, "Year" = participation_year, bmi, smoker, emot_risk, anemia, 
+  select(master_id, "Year" = participation_year, trig, smoker, emot_risk, anemia, 
          high_chol, hyperten, met_syn, crit_cond, pre_diabetes, uncon_diabetes)
 cond_cols <- names(phs %>% select(-master_id, -Year))
 cond_cols_no <- do.call(paste0, list(cond_cols, "_no"))
 
-claims_plus <- assign_table("proc_plus_tab", "Data/Sub_Tables/claims_proc_plus.csv") %>% filter(!is.na(bmi)) %>%
-  mutate(high_chol = as.numeric(high_chol | high_chol_new),
+claims_plus <- assign_table("proc_plus_tab", "Data/Sub_Tables/claims_proc_plus.csv") %>% filter(!is.na(anemia)) %>%
+  mutate(high_chol = as.numeric(ldl),
          hyperten = as.numeric(hyperten | hyperten_new)) %>% 
-  mutate_at(.cols = cond_cols, funs("id" = ifelse(. ,1, 0), "no" = ifelse(., 0, 1))) %>%
+  mutate_at(.vars = cond_cols, funs("id" = ifelse(. ,1, 0), "no" = ifelse(., 0, 1))) %>%
   select_(.dots = c("master_id", "Year", "primary_amount", cond_cols, cond_cols_no))
 
-rx_plus <- assign_table("rx_plus_tab", "Data/Sub_Tables/claims_rx_plus.csv") %>% filter(!is.na(bmi)) %>% 
-  mutate(high_chol = as.numeric(high_chol | high_chol_new),
+rx_plus <- assign_table("rx_plus_tab", "Data/Sub_Tables/claims_rx_plus.csv") %>% filter(!is.na(anemia)) %>% 
+  mutate(high_chol = as.numeric(ldl),
          hyperten = as.numeric(hyperten | hyperten_new)) %>% 
-  mutate_at(.cols = cond_cols, funs("id" = ifelse(. ,1, 0), "no" = ifelse(., 0, 1))) %>%
+  mutate_at(.vars = cond_cols, funs("id" = ifelse(. ,1, 0), "no" = ifelse(., 0, 1))) %>%
   select_(.dots = c("master_id", "Year", "primary_amount", cond_cols, cond_cols_no))
 
 mms <- assign_table("claims_per_member_tab", "Data/Sub_Tables/claims_per_member.csv") %>% select(master_id, Year, mms_p) %>%
@@ -44,7 +44,7 @@ mms <- assign_table("claims_per_member_tab", "Data/Sub_Tables/claims_per_member.
 assessment_yrs <- c(1900, unique(phs$Year)[order(unique(phs$Year))], 3000)
 
 prevalence <- phs %>% arrange(master_id, desc(Year)) %>%
-  mutate_at(.cols = cond_cols, 
+  mutate_at(.vars = cond_cols, 
             funs("prev" = ifelse(., 1, 0), 
                  "prevconv" = ifelse(master_id == lag(master_id, 1) & 
                                    . == 1 & 
@@ -59,7 +59,7 @@ prevalence <- left_join(prevalence %>% filter(type == "Prevalence") %>% rename("
                    prevalence %>% filter(type == "Conversion") %>% rename("conversion" = count) %>% select(-type)) 
 
 prev_change <- prevalence %>% select(Year, condition, prevalence, conversion) %>% 
-  mutate("count" = ifelse(conversion == 0, 0, prevalence - conversion)) %>% select(Year, condition, count) %>%
+  mutate("count" = ifelse(prevalence == 0, 0, prevalence - conversion)) %>% select(Year, condition, count) %>%
   mutate(Group = Year, Year = assessment_yrs[match(Year, assessment_yrs)+1])
 
 prev_old <- prevalence %>% select(Year, condition, "count" = prevalence) %>% mutate(Group = Year)
@@ -71,8 +71,8 @@ prev <- bind_rows(prev_change, prev_old) %>% filter(between(Group, year(analysis
 all_claims <- bind_rows(claims_plus, rx_plus) 
 
 all_pmpm <- all_claims %>%
-  group_by(Year, master_id) %>% summarise_at(.cols = c(cond_cols, cond_cols_no, "primary_amount"), funs(sum)) %>% ungroup() %>% left_join(mms) %>%
-  mutate_at(.cols = c(cond_cols, cond_cols_no), funs("amt" = primary_amount*ifelse(. != 0, 1, 0), "mms" = mms_p*ifelse(. != 0, 1, 0))) %>%
+  group_by(Year, master_id) %>% summarise_at(.vars = c(cond_cols, cond_cols_no, "primary_amount"), funs(sum)) %>% ungroup() %>% left_join(mms) %>%
+  mutate_at(.vars = c(cond_cols, cond_cols_no), funs("amt" = primary_amount*ifelse(. != 0, 1, 0), "mms" = mms_p*ifelse(. != 0, 1, 0))) %>%
   group_by(Year) %>% summarise_all(funs(sum(., na.rm = TRUE))) %>% ungroup() %>% melt(id.var = "Year") %>%
   mutate(type = ifelse(str_detect(variable, "_amt"), "Cost", ifelse(str_detect(variable, "_mms"), "MMS", "Delete")),
          condition = str_replace(str_replace(variable, "_mms", ""), "_amt", "")) %>% filter(type != "Delete") %>% 
@@ -89,12 +89,18 @@ all_pmpm <- left_join(all_pmpm %>% filter(flag == "Yes") %>% rename("pmpm_yes" =
 
 ##### Calculates Total Savings For Each Condition #####
 
-savings <- inner_join(prevalence, all_pmpm) %>% mutate(total_savings = conversion*(pmpy_yes - pmpy_no)) %>% group_by(condition) %>%
+national_ca <- read_csv(paste0(directory, "Data/Fixed_Tables/national_estimates.csv"))
+national_ca <- national_ca %>% transmute(condition = c("anemia", "uncon_diabetes", "emot_risk", "high_chol", "trig", "hyperten", "met_syn", "pre_diabetes", "smoker"),
+                                         pmpy_nat = `Avoided PM`)
+
+savings <- inner_join(prevalence %>% mutate(conversion = lag(conversion,1)), all_pmpm) %>% filter(Year > year(analysis_start)) %>%
+  mutate(total_savings = conversion*(pmpy_yes - pmpy_no)) %>% group_by(condition) %>%
   summarise(total_savings = sum(total_savings), conversion = sum(conversion), 
             cost_yes = sum(cost_yes), cost_no = sum(cost_no), 
             mms_yes = sum(mms_yes), mms_no = sum(mms_no)) %>% ungroup() %>%
   mutate(pmpy_yes = cost_yes/(mms_yes/12), pmpy_no = cost_no/(mms_no/12), pmpy_diff = pmpy_yes - pmpy_no) %>%
-  mutate_all(funs(ifelse(is.nan(.), 0, .)))
+  mutate_all(funs(ifelse(is.nan(.), 0, .))) %>% left_join(national_ca) %>%
+  mutate(savings_national = pmpy_nat * conversion) #%>% mutate_all(ifelse(is.na(.), 0, .))
 
 ##### Write Data #####
 

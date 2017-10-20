@@ -6,6 +6,7 @@
 ###               human_flags
 ###               claims_proc_plus
 ###               claims_rx_plus
+###               top_condition_names
 ###               claims_per_member
 
 ### Output Tables: condition_counts
@@ -27,7 +28,7 @@
 deid_condition <- function(data, rename = TRUE){
   if(rename){
     data <- data %>% filter(!is.na(bmi)) %>% 
-      mutate(#high_chol = as.numeric(high_chol | high_chol_new),
+      mutate(high_chol = as.numeric(high_chol | high_chol_new),
              hyperten = as.numeric(hyperten | hyperten_new),
              diabetes = as.numeric(con_diabetes | uncon_diabetes | diabetes_new)) 
   }
@@ -44,7 +45,7 @@ deid_condition <- function(data, rename = TRUE){
 }
 
 translate <- function(names_col, remove_ = FALSE){
-  translator <- tibble("header_r" = c("trig", "inactive", "smoker", "emot_risk", "anemia", "ldl", 
+  translator <- tibble("header_r" = c("bmi", "inactive", "smoker", "emot_risk", "anemia", "high_chol", 
                                       "hyperten", "met_syn", "crit_cond", "pre_diabetes", "diabetes", "cond", "no_cond"),
                        "header_tableau" = c("High_Triglycerides", "Inactive", "Smoking", "Emotional_Risk", 
                                             "Anemia", "High_Cholesterol", "Hypertension", "Metabolic_Syndrome", 
@@ -95,26 +96,27 @@ gen_circle <- function(x, center_x, center_y, r, negative = FALSE){
 pct_change <- function(data, x, pct = FALSE){
   x <- data %>% select_(x) %>% collect %>% .[[1]]
   change <- mean(diff(x))
-  percent <- ifelse(pct, change, change/x[1])
-  return(percent)
+  pct <- change/x[1]
+  if(pct) pct <- change
+  return(pct)
 }
 
 ########## Figure Out Top Conditions ###########
 
 claims_plus <- assign_table("proc_plus_tab", "Data/Sub_Tables/claims_proc_plus.csv") %>% filter(!is.na(bmi)) %>% 
-  mutate(#high_chol = as.numeric(high_chol | high_chol_new),
+  mutate(high_chol = as.numeric(high_chol | high_chol_new),
          hyperten = as.numeric(hyperten | hyperten_new),
          diabetes = as.numeric(con_diabetes | uncon_diabetes | diabetes_new))
 
 rx_plus <- assign_table("proc_plus_tab", "Data/Sub_Tables/claims_rx_plus.csv") %>% filter(!is.na(bmi)) %>% 
-  mutate(#high_chol = as.numeric(high_chol | high_chol_new),
+  mutate(high_chol = as.numeric(high_chol | high_chol_new),
          hyperten = as.numeric(hyperten | hyperten_new),
          diabetes = as.numeric(con_diabetes | uncon_diabetes | diabetes_new))
 
-cond_cols_raw <- c("diabetes", "crit_cond", "pre_diabetes", "hyperten", "ldl", "emot_risk", "anemia", "met_syn", "smoker", "trig")
+cond_cols_raw <- c("diabetes", "crit_cond", "pre_diabetes", "hyperten", "high_chol", "emot_risk", "anemia", "met_syn", "smoker", "bmi")
 
 all_claims_all_conditions <- bind_rows(claims_plus, rx_plus) %>% group_by(participation_year) %>% 
-  summarise_at(vars(cond_cols_raw), funs(sum(primary_amount*., na.rm = TRUE))) %>% filter(participation_year == year(analysis_end))
+  summarise_at(.cols = cond_cols_raw, funs(sum(primary_amount*.))) %>% filter(participation_year == year(analysis_end))
 
 top_conditions <- names(all_claims_all_conditions)[order(t(all_claims_all_conditions[1,-1]), decreasing = TRUE)[1:3]+1]
 
@@ -125,7 +127,7 @@ cond_cols <- c("cond_1", "cond_2", "cond_3", "cond", "no_cond")
 cond_cols_all <- c("cond_1", "cond_2", "cond_3", "cond",  "no_cond_1", "no_cond_2", "no_cond_3", "no_cond")
 
 mms <- assign_table("claims_per_member_tab", "Data/Sub_Tables/claims_per_member.csv") %>% select(master_id, Year, mms_p) %>%
-  group_by(master_id, Year) %>% summarise(mms_p = sum(mms_p, na.rm = TRUE)) %>% ungroup()
+  group_by(master_id, Year) %>% summarise(mms_p = sum(mms_p)) %>% ungroup()
 
 claims_plus <- claims_plus %>% deid_condition(., FALSE) %>% select_(.dots = c("master_id", "Year", "primary_amount", cond_cols_all)) 
 rx_plus <- rx_plus %>% deid_condition(., FALSE) %>% select_(.dots = c("master_id", "Year", "primary_amount", cond_cols_all)) 
@@ -155,7 +157,7 @@ demo <- demo %>%
          age_young = age_18.45) %>% select_(.dots = c(cond_cols, "male", "female", "geo_high_risk", "geo_low_risk", "age_old", "age_young"))
 
 all_claims <- bind_rows(claims_plus, rx_plus)
-total_claims <- sum(all_claims$primary_amount, na.rm = TRUE)
+total_claims <- sum(all_claims$primary_amount)
 
 counts <- demo %>% select_(.dots = cond_cols) %>% 
   mutate(cond_1_1 = cond_1 & !cond_2 & !cond_3,
@@ -164,25 +166,25 @@ counts <- demo %>% select_(.dots = cond_cols) %>%
          cond_2_2 = !cond_1 & cond_2 & !cond_3,
          cond_2_3 = !cond_1 & cond_2 & cond_3,
          cond_3_3 = !cond_1 & !cond_2 & cond_3,
-         cond_1_2_3 = cond_1 & cond_2 & cond_3) %>% summarise_all(funs(sum(., na.rm = TRUE))) %>% ungroup() %>%
+         cond_1_2_3 = cond_1 & cond_2 & cond_3) %>% summarise_all(sum) %>% ungroup() %>%
   select(cond_1, cond_2, cond_3, cond_1_1, cond_1_2, cond_1_3, cond_2_2, cond_2_3, cond_3_3, cond_1_2_3, cond, no_cond)
 
-percents <- counts %>% mutate_all(funs(./sum(counts$no_cond, counts$cond, na.rm = TRUE)))
+percents <- counts %>% mutate_all(funs(./sum(counts$no_cond, counts$cond)))
 
 counts_percents <- bind_rows(counts, percents) %>%
   mutate(variable = c("counts", "percents"))
 
 ########## Build Condition Bars ##########
 
-percent_bars <- all_claims %>% filter(Year >= year(analysis_end)) %>% mutate_at(vars(cond_cols_all), funs(primary_amount*.)) %>%
-  select_(.dots = cond_cols_all) %>% summarise_all(funs(sum(., na.rm = TRUE))) %>% 
+percent_bars <- all_claims %>% filter(Year >= year(analysis_end)) %>% mutate_at(.cols = cond_cols_all, funs(primary_amount*.)) %>%
+  select_(.dots = cond_cols_all) %>% summarise_all(funs(sum)) %>% 
   melt(variable.name = "variable", value.name = "total_spending") %>%
   mutate(condition = rep(c(translate(top_conditions, TRUE), "Any Top 3 Condition"), 2))
 
 ##### Build Prevalence Table #####
 
-percent_prevalence <- phs %>% filter(participation_year >= year(analysis_start)) %>% group_by(participation_year) %>% summarise_at(vars(cond_cols), funs(sum(., na.rm = TRUE))) %>%
-  mutate(full_prev = cond + no_cond) %>% mutate_at(vars(cond_cols), funs(./full_prev)) %>% select(-full_prev)
+percent_prevalence <- phs %>% filter(participation_year >= year(analysis_start)) %>% group_by(participation_year) %>% summarise_at(.cols = cond_cols, funs(sum(.))) %>%
+  mutate(full_prev = cond + no_cond) %>% mutate_at(.cols = cond_cols, funs(./full_prev)) %>% select(-full_prev)
 
 percent_prevalence <- percent_prevalence %>% mutate(participation_year = as.character(participation_year)) %>%
   bind_rows(tibble("participation_year" = "Trend",
@@ -196,48 +198,49 @@ percent_prevalence <- percent_prevalence %>% mutate(participation_year = as.char
 ##### Build Spending Table #####
 
 spending <- all_claims %>%
-  group_by(Year, master_id) %>% summarise_at(vars(cond_cols, "primary_amount"), funs(sum(., na.rm = TRUE))) %>% ungroup() %>% left_join(mms) %>%
-  mutate_at(vars(cond_cols), funs("amt" = primary_amount*ifelse(. != 0, 1, 0), "mms" = mms_p*ifelse(. != 0, 1, 0))) %>%
-  group_by(Year) %>% summarise_all(funs(sum(., na.rm = TRUE))) %>% ungroup() %>% select(-master_id, -cond_1, -cond_2, -cond_3, -cond, -no_cond, -primary_amount, -mms_p) %>%
+  group_by(Year, master_id) %>% summarise_at(.cols = c(cond_cols, "primary_amount"), funs(sum)) %>% ungroup() %>% left_join(mms) %>%
+  mutate_at(.cols = cond_cols, funs("amt" = primary_amount*ifelse(. != 0, 1, 0), "mms" = mms_p*ifelse(. != 0, 1, 0))) %>%
+  group_by(Year) %>% summarise_all(funs(sum)) %>% ungroup() %>% select(-master_id, -cond_1, -cond_2, -cond_3, -cond, -no_cond, -primary_amount, -mms_p) %>%
   transmute(Year = as.character(Year),
             cond_1 = cond_1_amt/cond_1_mms, 
             cond_2 = cond_2_amt/cond_2_mms, 
             cond_3 = cond_3_amt/cond_3_mms, 
             cond = cond_amt/cond_mms, 
             no_cond = no_cond_amt/no_cond_mms)
+  
 
 spending <- spending %>% bind_rows(tibble("Year" = "Trend",
-                                          "cond_1" = pct_change(spending, "cond_1", FALSE),
-                                          "cond_2" = pct_change(spending, "cond_2", FALSE),
-                                          "cond_3" = pct_change(spending, "cond_3", FALSE),
-                                          "cond" = pct_change(spending, "cond", FALSE),
-                                          "no_cond" = pct_change(spending, "no_cond", FALSE))) %>% melt(id.vars = "Year") %>%
+                                          "cond_1" = pct_change(spending, "cond_1"),
+                                          "cond_2" = pct_change(spending, "cond_2"),
+                                          "cond_3" = pct_change(spending, "cond_3"),
+                                          "cond" = pct_change(spending, "cond"),
+                                          "no_cond" = pct_change(spending, "no_cond"))) %>% melt(id.vars = "Year") %>%
   mutate(condition = translate_cond(variable, TRUE))
 
 ##### Build Demographics Table #####
 
 demo_no_cond <- select(demo, -cond_1, -cond_2, -cond_3, -cond) %>%
-  summarise_at(vars(male, female, geo_high_risk, geo_low_risk, age_old, age_young), funs(sum(no_cond*., na.rm = TRUE)/counts$no_cond)) %>%
+  summarise_at(.cols = c("male", "female", "geo_high_risk", "geo_low_risk", "age_old", "age_young"), funs(sum(no_cond*.)/counts$no_cond)) %>%
   melt() %>% mutate(condition = "no_cond",
                     demographic = rep(c('Gender', 'Geography', 'Age'), each =  2))
 
 demo_cond <- select(demo, -cond_1, -cond_2, -cond_3, -no_cond) %>%
-  summarise_at(vars(male, female, geo_high_risk, geo_low_risk, age_old, age_young), funs(sum(cond*., na.rm = TRUE)/counts$cond)) %>%
+  summarise_at(.cols = c("male", "female", "geo_high_risk", "geo_low_risk", "age_old", "age_young"), funs(sum(cond*.)/counts$cond)) %>%
   melt() %>% mutate(condition = "cond",
                     demographic = rep(c('Gender', 'Geography', 'Age'), each =  2))
 
 demo_cond_1 <- select(demo, -no_cond, -cond_2, -cond_3, -cond) %>%
-  summarise_at(vars(male, female, geo_high_risk, geo_low_risk, age_old, age_young), funs(sum(cond_1*., na.rm = TRUE)/counts$cond_1)) %>%
+  summarise_at(.cols = c("male", "female", "geo_high_risk", "geo_low_risk", "age_old", "age_young"), funs(sum(cond_1*.)/counts$cond_1)) %>%
   melt() %>% mutate(condition = "cond_1",
                     demographic = rep(c('Gender', 'Geography', 'Age'), each =  2))
 
 demo_cond_2 <- select(demo, -cond_1, -no_cond, -cond_3, -cond) %>%
-  summarise_at(vars(male, female, geo_high_risk, geo_low_risk, age_old, age_young), funs(sum(cond_2*., na.rm = TRUE)/counts$cond_2)) %>%
+  summarise_at(.cols = c("male", "female", "geo_high_risk", "geo_low_risk", "age_old", "age_young"), funs(sum(cond_2*.)/counts$cond_2)) %>%
   melt() %>% mutate(condition = "cond_2",
                     demographic = rep(c('Gender', 'Geography', 'Age'), each =  2))
 
 demo_cond_3 <- select(demo, -cond_1, -cond_2, -no_cond, -cond) %>%
-  summarise_at(vars(male, female, geo_high_risk, geo_low_risk, age_old, age_young), funs(sum(cond_3*., na.rm = TRUE)/counts$cond_3)) %>%
+  summarise_at(.cols = c("male", "female", "geo_high_risk", "geo_low_risk", "age_old", "age_young"), funs(sum(cond_3*.)/counts$cond_3)) %>%
   melt() %>% mutate(condition = "cond_3",
                     demographic = rep(c('Gender', 'Geography', 'Age'), each =  2))
 
@@ -324,6 +327,5 @@ write_csv(demo_all, paste0(directory, "Data/Build_Tables/condition_demographics.
 rm ("deid_condition", "translate", "translate_cond", "distance", "gen_circle", "pct_change", "top_conditions", "human_flags", "cond_cols",
     "cond_cols_all", "mms", "claims_plus", "rx_plus", "phs", "demo", "counts", "percents", "counts_percents", "all_claims", "total_claims",
     "percent_bars", "percent_prevalence", "spending", "demo_no_cond", "demo_cond", "demo_cond_1", "demo_cond_2", "demo_cond_3", "demo_all",
-    "a1", "a2", "a3", "r1", "r2", "r3", "a12", "a23", "a13", "d12", "d13", "d23", "x1", "x2", "x3", "y1", "y2", "y3", 
+    "a1", "a2", "a3", "r1", "r2", "r3", "a12", "a23", "a13", "d12", "d13", "d23", "s2", "s3", "x1", "x2", "x3", "y1", "y2", "y3", "t2", "t3", 
     "counts_df", "cts", "cross_cts", "circles", "circles_long", "all_claims_all_conditions")
-

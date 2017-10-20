@@ -52,10 +52,10 @@ human_flags <- assign_table("human_flags_tab", "Data/Sub_Tables/human_flags.csv"
 phs <- assign_table("phs_tab", "Data/Sub_Tables/phs_analytics.csv")
 claims_per_member <- assign_table("claims_per_member_tab", "Data/Sub_Tables/claims_per_member.csv")
 
-full_members <- human_flags %>% filter(cov_start_dt <= analysis_start, cov_end_dt >= analysis_date) 
+full_members <- human_flags %>% filter(cov_start_dt <= analysis_start, cov_end_dt >= analysis_date | is.na(cov_end_dt)) 
 
 if(dim(full_members)[1] == 0){
-  full_members <- human_flags %>% filter(cov_start_dt <= analysis_start, cov_end_dt == max(cov_end_dt))   
+  full_members <- human_flags %>% filter(cov_start_dt <= analysis_start, cov_end_dt == max(cov_end_dt) | is.na(cov_end_dt))   
 }
 
 full_participants <- phs %>% group_by(master_id) %>% summarise(ct = n()) %>% ungroup() %>%
@@ -75,6 +75,10 @@ high_low <- get_phs_cohort('high', 'low')
 high_mod <- get_phs_cohort('high', 'moderate')
 high_high <- get_phs_cohort('high', 'high')
 
+improved <- c(mod_low, high_mod, high_low)
+fallen <- c(low_mod, mod_high, low_high)
+maintained <- c(mod_mod, high_high)
+
 ##### Add cohort flags to claims #####
 
 claims_per_member_cohorts <- claims_per_member %>%
@@ -82,14 +86,9 @@ claims_per_member_cohorts <- claims_per_member %>%
          full_participant  = master_id %in% full_participants$master_id,
          full_non_participant = master_id %in% full_non_participants$master_id,
          low_low = master_id %in% low_low,
-         low_mod = master_id %in% low_mod,
-         low_high = master_id %in% low_high,
-         mod_low = master_id %in% mod_low,
-         mod_mod = master_id %in% mod_mod,
-         mod_high = master_id %in% mod_high,
-         high_low = master_id %in% high_low,
-         high_mod = master_id %in% high_mod,
-         high_high = master_id %in% high_high,
+         improved = master_id %in% improved,
+         fallen = master_id %in% fallen,
+         maintained = master_id %in% maintained,
          total_primary = total_med_primary_p + total_rx_primary_p + total_med_primary_np + total_rx_primary_np,
          total_secondary = total_med_secondary_p + total_rx_secondary_p + total_med_secondary_np + total_rx_secondary_np) %>% 
   filter(full_member)
@@ -103,37 +102,34 @@ claims_by_year_cohorts <- claims_per_member_cohorts %>%
             pmpm_p = sum(full_participant*total_primary)/sum(full_participant*mms),
             pmpm_np = sum(full_non_participant*total_primary)/sum(full_non_participant*mms),
             pmpm_low_low = sum(total_primary*low_low)/sum(mms*low_low),
-            pmpm_low_mod = sum(total_primary*low_mod)/sum(mms*low_mod),
-            pmpm_low_high = sum(total_primary*low_high)/sum(mms*low_high),
-            pmpm_mod_low = sum(total_primary*mod_low)/sum(mms*mod_low),
-            pmpm_mod_mod = sum(total_primary*mod_mod)/sum(mms*mod_mod),
-            pmpm_mod_high = sum(total_primary*mod_high)/sum(mms*mod_high),
-            pmpm_high_low = sum(total_primary*high_low)/sum(mms*high_low),
-            pmpm_high_mod = sum(total_primary*high_mod)/sum(mms*high_mod),
-            pmpm_high_high = sum(total_primary*high_high)/sum(mms*high_high)) %>%
+            pmpm_improved = sum(total_primary*improved)/sum(mms*improved),
+            pmpm_fallen = sum(total_primary*fallen)/sum(mms*fallen),
+            pmpm_maintained = sum(total_primary*maintained)/sum(mms*maintained)) %>%
   mutate(`Diff (P - NP)` = as.character(pmpm_p - pmpm_np))
 
 ##### Build PMPM PHS Cohorts #####
 
 pmpm_phs_cohorts <- claims_by_year_cohorts %>% 
-  select(Year, pmpm_p,
-         pmpm_low_low, pmpm_low_mod, pmpm_low_high,
-         pmpm_mod_low, pmpm_mod_mod, pmpm_mod_high,
-         pmpm_high_low, pmpm_high_mod, pmpm_high_high) %>%
+  select(Year, pmpm_p, pmpm_low_low, pmpm_improved, pmpm_fallen, pmpm_maintained) %>%
   melt(id.vars = 'Year') %>%
-  mutate(start_state = gsub('.+_(.+)_.+', '\\1', variable),
-         end_state = gsub('.+_.+_(.+)', '\\1', variable)) %>%
-  mutate(start_state = case_when(.$start_state == 'low' ~ 1,
-                                 .$start_state == 'mod' ~ 2,
-                                 .$start_state == 'high' ~ 3,
-                                 .$start_state == 'pmpm_p' ~ 4),
-         end_state = case_when(.$end_state == 'low' ~ 1,
-                               .$end_state == 'mod' ~ 2,
-                               .$end_state == 'high' ~ 3,
-                               .$end_state == 'pmpm_p' ~ 4)) %>%
-  mutate(color = case_when(abs(.$Year - year(analysis_start)) <= abs(.$Year - year(get_assessments()[length(get_assessments())])) ~ .$start_state,
-                           abs(.$Year - year(analysis_start)) > abs(.$Year - year(get_assessments()[length(get_assessments())])) ~ .$end_state)) %>%
-  select(Year, 'cohort' = variable, 'pmpm' = value, 'color' = color)
+  
+  select(Year, 'cohort' = variable, 'pmpm' = value) %>%
+  mutate_at(vars(pmpm), funs(ifelse(is.na(.), 0, .)))
+
+  #mutate(start_state = gsub('.+_(.+)_.+', '\\1', variable),
+  #       end_state = gsub('.+_.+_(.+)', '\\1', variable)) %>%
+  #mutate(start_state = case_when(.$start_state == 'low' ~ 1,
+  #                               .$start_state == 'mod' ~ 2,
+  #                               .$start_state == 'high' ~ 3,
+  #                               .$start_state == 'pmpm_p' ~ 4),
+  #       end_state = case_when(.$end_state == 'low' ~ 1,
+  #                             .$end_state == 'mod' ~ 2,
+  #                             .$end_state == 'high' ~ 3,
+  #                             .$end_state == 'pmpm_p' ~ 4)) %>%
+  #mutate(color = case_when(abs(.$Year - year(analysis_start)) <= abs(.$Year - year(get_assessments()[length(get_assessments())])) ~ .$start_state,
+  #                         abs(.$Year - year(analysis_start)) > abs(.$Year - year(get_assessments()[length(get_assessments())])) ~ .$end_state)) %>%
+  #select(Year, 'cohort' = variable, 'pmpm' = value, 'color' = color) %>%
+  #mutate_all(funs(ifelse(is.na(.), 0, .)))
 
 ##### Calculate Trend #####
 
@@ -142,14 +138,9 @@ claims_by_year_cohorts_change <- tibble('Year' = c('Change','Pct Change'),
                                         'pmpm_p'  = pct_change_cohort('pmpm_p'),
                                         'pmpm_np'  = pct_change_cohort('pmpm_np'),
                                         'pmpm_low_low' = pct_change_cohort('pmpm_low_low'),
-                                        'pmpm_low_mod' = pct_change_cohort('pmpm_low_mod'),
-                                        'pmpm_low_high' = pct_change_cohort('pmpm_low_high'),
-                                        'pmpm_mod_low' = pct_change_cohort('pmpm_mod_low'),
-                                        'pmpm_mod_mod' = pct_change_cohort('pmpm_mod_mod'),
-                                        'pmpm_mod_high' = pct_change_cohort('pmpm_mod_high'),
-                                        'pmpm_high_low' = pct_change_cohort('pmpm_high_low'),
-                                        'pmpm_high_mod' = pct_change_cohort('pmpm_high_mod'),
-                                        'pmpm_high_high' = pct_change_cohort('pmpm_high_high'),
+                                        'pmpm_improved' = pct_change_cohort('pmpm_improved'),
+                                        'pmpm_fallen' = pct_change_cohort('pmpm_fallen'),
+                                        'pmpm_maintained' = pct_change_cohort('pmpm_maintained'),
                                         'Diff (P - NP)'  = c('',''))
 
 ##### Calculate Cohort Size #####
@@ -159,21 +150,17 @@ claims_by_year_cohorts_counts <- tibble('Year' = c('Cohort Size'),
                                         'pmpm_p'  = dim(full_participants)[1],
                                         'pmpm_np'  = dim(full_non_participants)[1],
                                         'pmpm_low_low' = length(low_low),
-                                        'pmpm_low_mod' = length(low_mod),
-                                        'pmpm_low_high' = length(low_high),
-                                        'pmpm_mod_low' = length(mod_low),
-                                        'pmpm_mod_mod' = length(mod_mod),
-                                        'pmpm_mod_high' = length(mod_high),
-                                        'pmpm_high_low' = length(high_low),
-                                        'pmpm_high_mod' = length(high_mod),
-                                        'pmpm_high_high' = length(high_high)) %>%
+                                        'pmpm_improved' = length(improved),
+                                        'pmpm_fallen' = length(fallen),
+                                        'pmpm_maintained' = length(maintained)) %>%
   mutate(`Diff (P - NP)` = as.character(pmpm_p - pmpm_np))
 
 ##### Build claims_by_year_cohorts #####
 
 claims_by_year_cohorts <- rbind(claims_by_year_cohorts,
                                 claims_by_year_cohorts_change,
-                                claims_by_year_cohorts_counts)
+                                claims_by_year_cohorts_counts) %>%
+  mutate_all(funs(ifelse(is.na(.), 0, .)))
 
 ##### Write Data #####
 

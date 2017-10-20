@@ -28,19 +28,21 @@
 
 create_crosstab <- function(data, cross_tab) {
   data %>% group_by_(.dots = lazyeval::lazy(cross_tab)) %>% 
-    summarise_each(funs(sum), Values_all_P, Values_all_NP, Values_all_Emp, Values_all_Sp, Values_Emp_P, Values_Emp_NP, Values_Sp_P, Values_Sp_NP) %>%
-    mutate_each(funs(./sum(.)), Values_all_P, Values_all_NP, Values_all_Emp, Values_all_Sp, Values_Emp_P, Values_Emp_NP, Values_Sp_P, Values_Sp_NP)
+    summarise_at(vars(Values_all_P, Values_all_NP, Values_all_Emp, Values_all_Sp, Values_Emp_P, Values_Emp_NP, Values_Sp_P, Values_Sp_NP), funs(sum)) %>%
+    mutate_at(vars(Values_all_P, Values_all_NP, Values_all_Emp, Values_all_Sp, Values_Emp_P, Values_Emp_NP, Values_Sp_P, Values_Sp_NP), funs(./sum(.)))
 }
 
 ##### Read in Data #####
 
 df_pii <- assign_table("human_flags_tab", "Data/Sub_Tables/human_flags.csv") %>%
-  filter(cov_end_dt > analysis_date | is.na(cov_end_dt)) %>% 
+  filter(cov_end_dt >= analysis_date | is.na(cov_end_dt),
+         cov_start_dt <= analysis_date) %>% 
   distinct(master_id, sex, geo_risk, emp_flag, age_45, age_18.45)
 
 if(dim(df_pii)[1] == 0){
   df_pii <- assign_table("human_flags_tab", "Data/Sub_Tables/human_flags.csv") %>%
-    filter(cov_end_dt == max(cov_end_dt)) %>% 
+    filter(cov_end_dt >= analysis_date | is.na(cov_end_dt),
+           cov_start_dt <= analysis_date) %>% 
     distinct(master_id, sex, geo_risk, emp_flag, age_45, age_18.45)
 }
 
@@ -75,7 +77,7 @@ flags_phs <- df_pii %>% left_join(df_phs) %>%
 ##### Count Populations #####
 
 df_counts <- flags %>% group_by() %>%
-  summarise_each(funs(sum), Values_all_P, Values_all_NP, Values_all_Emp, Values_all_Sp, Values_Emp_P, Values_Emp_NP, Values_Sp_P, Values_Sp_NP) %>% 
+  summarise_at(vars(Values_all_P, Values_all_NP, Values_all_Emp, Values_all_Sp, Values_Emp_P, Values_Emp_NP, Values_Sp_P, Values_Sp_NP), funs(sum)) %>% 
   mutate(Values_all = Values_all_Emp + Values_all_Sp) %>% ungroup()
 
 df_counts_phs <- flags_phs %>% group_by() %>%
@@ -86,7 +88,9 @@ df_counts_phs <- flags_phs %>% group_by() %>%
 
 ##### Build demo_xtabs #####
 
-demo_xtabs_tab <- flags %>% create_crosstab(Gender) %>% union_all(create_crosstab(flags, Age)) %>% union_all(create_crosstab(flags,Geography)) %>% 
+demo_xtabs_tab <- flags %>% create_crosstab(Gender) %>% 
+  union_all(create_crosstab(flags, Age)) %>% 
+  union_all(create_crosstab(flags,Geography)) %>% 
   mutate("Category" = ifelse(!is.na(Gender), "Gender", ifelse(!is.na(Age), "Age", "Geography")),
          "Subcategory" = coalesce(Gender, Age, Geography)) %>%
   select(Category, Subcategory, Values_all_P, Values_all_NP, Values_all_Emp, Values_all_Sp, Values_Emp_P, Values_Emp_NP, Values_Sp_P, Values_Sp_NP) %>%
@@ -103,12 +107,19 @@ all_flags <- df_pii %>%
             age = ifelse(age_45, 'Age 45 and Older', 'Under 45'),
             participation = ifelse(master_id %in% phs$master_id, 'Participant', 'Non-Participant'))
 
-total_demographics <- bind_cols(
-  all_flags %>% group_by(employment) %>% summarise(emp_percent = n()/dim(all_flags)[1]) %>% ungroup(),
-  all_flags %>% group_by(sex) %>% summarise(sex_percent = n()/dim(all_flags)[1]) %>% ungroup(),
-  all_flags %>% group_by(age) %>% summarise(age_percent = n()/dim(all_flags)[1]) %>% ungroup(),
-  all_flags %>% group_by(participation) %>% summarise(part_percent = n()/dim(all_flags)[1]) %>% ungroup()
-)
+emp <- all_flags %>% group_by(employment) %>% summarise(emp_percent = n()/dim(all_flags)[1]) %>% ungroup()
+if(dim(emp)[1] == 1) emp <- bind_rows(emp, tibble("employment" = "Other", "emp_percent" = 1-emp$emp_percent))
+
+sex <- all_flags %>% group_by(sex) %>% summarise(sex_percent = n()/dim(all_flags)[1]) %>% ungroup()
+if(dim(sex)[1] == 1) sex <- bind_rows(sex, tibble("sex" = "Other", "sex_percent" = 1-sex$sex_percent))
+
+age <- all_flags %>% group_by(age) %>% summarise(age_percent = n()/dim(all_flags)[1]) %>% ungroup()
+if(dim(age)[1] == 1) age <- bind_rows(age, tibble("age" = "Other", "age_percent" = 1-age$age_percent))
+
+part <- all_flags %>% group_by(participation) %>% summarise(part_percent = n()/dim(all_flags)[1]) %>% ungroup()
+if(dim(part)[1] == 1) part <- bind_rows(part, tibble("participation" = "Other", "part_percent" = 1-part$part_percent))
+
+total_demographics <- bind_cols(emp, sex, age, part)
 
 ##### Build demo_phs_xtabs #####
 
@@ -234,5 +245,5 @@ print("demo_tree_Emp_P_vs_NP written to Data/Build_Tables")
 print("demo_tree_Sp_P_vs_NP written to Data/Build_Tables")
 print("phs_count_by_year written to Data/Build_Tables")
 
-rm("df_counts", "df_phs", "df_pii", "flags", "create_crosstab", "all_flags", 'phs')
+rm("df_counts", "df_phs", "df_pii", "flags", "create_crosstab", "all_flags", 'phs', 'emp', 'part', 'age', 'sex')
 

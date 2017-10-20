@@ -244,19 +244,19 @@ write_csv(df_claims_by_year, paste0(directory, "Data/Build_Tables/pmpm_by_year.c
 write_csv(totals_by_year, paste0(directory, "Data/Build_Tables/totals_by_year.csv"))
 write_csv(df_proc_claims_by_year, paste0(directory, "Data/Build_Tables/proc_pmpm_by_year.csv"))
 write_csv(df_rx_claims_by_year, paste0(directory, "Data/Build_Tables/rx_pmpm_by_year.csv"))
-write_csv(df_claims_by_quarter, paste0(directory, "Data/Build_Tables/pmpm_by_quarter.csv"))
+#write_csv(df_claims_by_quarter, paste0(directory, "Data/Build_Tables/pmpm_by_quarter.csv"))
 
 print('totals_by_year written to Data/Build_Tables')
 print("pmpm_by_year written to Data/Build_Tables")
 print("proc_pmpm_by_year written to Data/Build_Tables")
 print("rx_pmpm_by_year written to Data/Build_Tables")
-print("pmpm_by_quarter written to Data/Build_Tables")
+#print("pmpm_by_quarter written to Data/Build_Tables")
 
 totals_by_year -> totals_by_year_tab
 df_claims_by_year -> pmpm_by_year_tab
 df_proc_claims_by_year -> proc_pmpm_by_year_tab
 df_rx_claims_by_year -> rx_pmpm_by_year_tab
-df_claims_by_quarter -> pmpm_by_quarter_tab
+#df_claims_by_quarter -> pmpm_by_quarter_tab
 
 rm("df_claims", "df_claims_by_quarter", "df_rx_claims_by_year", "df_proc_claims_by_year", 
    'df_claims_by_year', "df_claims_by_year_change", "df_pii", 'totals_by_year')
